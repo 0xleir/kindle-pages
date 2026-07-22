@@ -19,16 +19,17 @@
   /* 旋转舞台：所有内容包在里面，整体旋转以实现横屏 */
   .stage {
     position:absolute; top:50%; left:50%;
+    -webkit-transform-origin:center center; transform-origin:center center;
     box-sizing:border-box;
     display:flex; flex-direction:column;
     padding:4vw 5vw;
   }
   /* 竖屏 */
-  body.portrait  .stage { width:100vw; height:100vh; transform:translate(-50%,-50%); }
+  body.portrait  .stage { width:100vw; height:100vh; -webkit-transform:translate(-50%,-50%); transform:translate(-50%,-50%); }
   /* 横屏：交换宽高后旋转。rot90=顺时针 / rot270=逆时针，按 Kindle 横放方向二选一 */
   body.landscape .stage { width:100vh; height:100vw; }
-  body.rot90     .stage { transform:translate(-50%,-50%) rotate(90deg); }
-  body.rot270    .stage { transform:translate(-50%,-50%) rotate(-90deg); }
+  body.rot90     .stage { -webkit-transform:translate(-50%,-50%) rotate(90deg); transform:translate(-50%,-50%) rotate(90deg); }
+  body.rot270    .stage { -webkit-transform:translate(-50%,-50%) rotate(-90deg); transform:translate(-50%,-50%) rotate(-90deg); }
 
   /* 顶部：时间 */
   .clock { text-align:center; }
