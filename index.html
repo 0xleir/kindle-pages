@@ -11,101 +11,63 @@
   html,body {
     width:100%; height:100%;
     background:#fff; color:#000;
-    font-family:"Helvetica Neue",Helvetica,Arial,"PingFang SC","Microsoft YaHei",sans-serif;
-    -webkit-font-smoothing:none;
+    font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;
+    line-height:1.15;
     overflow:hidden;
+    -webkit-text-size-adjust:none;
   }
-  body { position:relative; overflow:hidden; }
-  /* 旋转舞台：所有内容包在里面，整体旋转以实现横屏 */
-  .stage {
+  /* 舞台：尺寸/位置/字号由 JS 用 px 设置（老 Kindle WebKit 不支持 vw/vh/flex） */
+  #stage {
     position:absolute; top:50%; left:50%;
+    overflow:hidden;
+    text-align:center;
+    padding:0.6em 1.4em;
     -webkit-transform-origin:center center; transform-origin:center center;
-    box-sizing:border-box;
-    display:flex; flex-direction:column;
-    padding:4vw 5vw;
   }
-  /* 竖屏 */
-  body.portrait  .stage { width:100vw; height:100vh; -webkit-transform:translate(-50%,-50%); transform:translate(-50%,-50%); }
-  /* 横屏：交换宽高后旋转。rot90=顺时针 / rot270=逆时针，按 Kindle 横放方向二选一 */
-  body.landscape .stage { width:100vh; height:100vw; }
-  body.rot90     .stage { -webkit-transform:translate(-50%,-50%) rotate(90deg); transform:translate(-50%,-50%) rotate(90deg); }
-  body.rot270    .stage { -webkit-transform:translate(-50%,-50%) rotate(-90deg); transform:translate(-50%,-50%) rotate(-90deg); }
-
-  /* 顶部：时间 */
-  .clock { text-align:center; }
-  .time { font-size:26vw; font-weight:700; line-height:0.95; letter-spacing:-0.02em; }
-  .gdate { font-size:6vw; font-weight:400; margin-top:1vw; }
-
-  hr { border:none; border-top:2px solid #000; margin:2vw 0; }
-
-  /* 农历行 */
-  .lunar { text-align:center; }
-  .lunar-main { font-size:7vw; font-weight:700; }
-  .lunar-sub { font-size:4.5vw; margin-top:0.8vw; }
-
-  /* 天气区 */
-  .weather { flex:1; display:flex; flex-direction:column; justify-content:flex-end; }
-  .wx-top { display:flex; align-items:baseline; justify-content:center; }
-  .wx-temp { font-size:17vw; font-weight:700; line-height:0.9; }
-  .wx-unit { font-size:8vw; font-weight:400; margin-left:1vw; }
-  .wx-city { font-size:5vw; margin-left:4vw; align-self:center; }
-  .wx-grid {
-    display:flex; justify-content:space-around;
-    font-size:4.6vw; margin-top:2.4vw; text-align:center;
-  }
-  .wx-grid .cell { flex:1; }
-  .wx-grid .lbl { font-size:3.4vw; opacity:0.75; display:block; margin-bottom:0.6vw; }
-  .wx-grid .val { font-weight:700; }
-  .wx-grid .sep { width:2px; background:#000; margin:0.5vw 0; }
-
-  .wx-trend { text-align:center; font-size:3.9vw; font-weight:700; margin-top:2.4vw; }
-  .footer { text-align:center; font-size:3vw; opacity:0.6; margin-top:2.5vw; }
+  .time { font-size:3.0em; font-weight:bold; line-height:1; }
+  .gdate { font-size:0.72em; margin-top:0.15em; }
+  .rule { border-top:2px solid #000; margin:0.35em 0; }
+  .lunar-main { font-size:0.85em; font-weight:bold; }
+  .lunar-sub { font-size:0.56em; margin-top:0.1em; white-space:nowrap; }
+  .wx-hero { margin:0.3em 0 0.15em; white-space:nowrap; }
+  .wx-temp { font-size:2.0em; font-weight:bold; }
+  .wx-unit { font-size:0.8em; }
+  .wx-city { font-size:0.62em; margin-left:0.6em; }
+  /* 横排一律用 table，老引擎必渲染 */
+  .grid { width:100%; table-layout:fixed; border-collapse:collapse; margin-top:0.3em; }
+  .grid td { text-align:center; vertical-align:top; }
+  .grid .lbl { font-size:0.42em; }
+  .grid .val { font-size:0.6em; font-weight:bold; margin-top:0.05em; }
+  .trend { font-size:0.5em; font-weight:bold; margin-top:0.35em; white-space:nowrap; }
+  .footer { font-size:0.38em; margin-top:0.3em; }
 </style>
 </head>
-<body class="landscape rot90">
-  <div class="stage">
-  <div class="clock">
+<body>
+  <div id="stage">
     <div class="time" id="time">--:--</div>
     <div class="gdate" id="gdate">----</div>
-  </div>
-
-  <hr>
-
-  <div class="lunar">
+    <div class="rule"></div>
     <div class="lunar-main" id="lunarMain">农历 ----</div>
     <div class="lunar-sub" id="lunarSub">--</div>
-  </div>
-
-  <hr>
-
-  <div class="weather">
-    <div class="wx-top">
-      <span class="wx-temp" id="wxTemp">--</span>
-      <span class="wx-unit">°C</span>
-      <span class="wx-city" id="wxCity">成都</span>
+    <div class="rule"></div>
+    <div class="wx-hero">
+      <span class="wx-temp" id="wxTemp">--</span><span class="wx-unit">&deg;C</span><span class="wx-city" id="wxCity">成都</span>
     </div>
-    <div class="wx-grid">
-      <div class="cell"><span class="lbl">体感</span><span class="val" id="wxFeel">--°</span></div>
-      <div class="sep"></div>
-      <div class="cell"><span class="lbl">湿度</span><span class="val" id="wxHum">--%</span></div>
-      <div class="sep"></div>
-      <div class="cell"><span class="lbl">风向</span><span class="val" id="wxWdir">--</span></div>
-      <div class="sep"></div>
-      <div class="cell"><span class="lbl">风速</span><span class="val" id="wxWspd">-- m/s</span></div>
-    </div>
-    <div class="wx-grid">
-      <div class="cell"><span class="lbl">日出</span><span class="val" id="wxSunrise">--</span></div>
-      <div class="sep"></div>
-      <div class="cell"><span class="lbl">日落</span><span class="val" id="wxSunset">--</span></div>
-      <div class="sep"></div>
-      <div class="cell"><span class="lbl">最高</span><span class="val" id="wxTmax">--&deg;</span></div>
-      <div class="sep"></div>
-      <div class="cell"><span class="lbl">最低</span><span class="val" id="wxTmin">--&deg;</span></div>
-    </div>
-    <div class="wx-trend" id="wxTrend">未来 --</div>
+    <table class="grid"><tr>
+      <td><div class="lbl">体感</div><div class="val" id="wxFeel">--&deg;</div></td>
+      <td><div class="lbl">湿度</div><div class="val" id="wxHum">--%</div></td>
+      <td><div class="lbl">风向</div><div class="val" id="wxWdir">--</div></td>
+      <td><div class="lbl">风速</div><div class="val" id="wxWspd">--</div></td>
+    </tr></table>
+    <table class="grid"><tr>
+      <td><div class="lbl">日出</div><div class="val" id="wxSunrise">--</div></td>
+      <td><div class="lbl">日落</div><div class="val" id="wxSunset">--</div></td>
+      <td><div class="lbl">最高</div><div class="val" id="wxTmax">--&deg;</div></td>
+      <td><div class="lbl">最低</div><div class="val" id="wxTmin">--&deg;</div></td>
+    </tr></table>
+    <div class="trend" id="wxTrend">未来 --</div>
     <div class="footer" id="footer">更新于 --:--</div>
   </div>
-  </div><!-- /.stage -->
 
 <script>
 /* ============ 工具 ============ */
@@ -295,8 +257,21 @@ var LON=parseFloat(getParam('lon','104.0668'));
 var CITY=getParam('city','成都');
 var REFRESH=parseInt(getParam('refresh','60'),10);
 var ROT=getParam('rotate','90');  // 90=横屏顺时针(默认) / 270 或 -90=逆时针 / 0=竖屏
-document.body.className = (ROT==='0') ? 'portrait'
-  : ('landscape '+((ROT==='270'||ROT==='-90')?'rot270':'rot90'));
+// 用真实窗口像素计算舞台尺寸/旋转（老 Kindle 无 vw/vh）
+function layout(){
+  var W=window.innerWidth||document.documentElement.clientWidth||600;
+  var H=window.innerHeight||document.documentElement.clientHeight||800;
+  var shortE=Math.min(W,H), longE=Math.max(W,H);
+  var st=$('stage'), boxW, boxH, tf='';
+  if(ROT==='0'){ boxW=shortE; boxH=longE; }
+  else { boxW=longE; boxH=shortE; tf='rotate('+((ROT==='270'||ROT==='-90')?'-90':'90')+'deg)'; }
+  st.style.width=boxW+'px';  st.style.height=boxH+'px';
+  st.style.marginLeft=(-boxW/2)+'px';  st.style.marginTop=(-boxH/2)+'px';
+  st.style.webkitTransform=tf;  st.style.transform=tf;
+  st.style.fontSize=(shortE/17)+'px';
+}
+layout();
+if(window.addEventListener){ window.addEventListener('resize',layout,false); }
 if(isNaN(LAT)) LAT=30.5728;
 if(isNaN(LON)) LON=104.0668;
 if(isNaN(REFRESH)||REFRESH<10) REFRESH=60;  // 下限 10s，防误设
