@@ -181,16 +181,29 @@ function currentTermInfo(y,m,d){
 }
 
 /* ============ 更新时间 & 农历 ============ */
+function localNow(){
+  // Force Asia/Shanghai regardless of system tz (CI runners = UTC)
+  // Fallback for old WebKit without Intl timeZone support
+  try{
+    var s=new Date().toLocaleString('sv-SE',{timeZone:'Asia/Shanghai'});
+    var p=s.split(/[\- :]/);
+    return {y:+p[0],mo:+p[1],d:+p[2],h:+p[3],mi:+p[4]};
+  }catch(e){
+    var now=new Date();
+    return {y:now.getFullYear(),mo:now.getMonth()+1,d:now.getDate(),h:now.getHours(),mi:now.getMinutes()};
+  }
+}
 function renderDateTime(){
-  var now=new Date();
-  var y=now.getFullYear(), mo=now.getMonth()+1, d=now.getDate();
-  var wk=['周日','周一','周二','周三','周四','周五','周六'][now.getDay()];
-  $('time').textContent=pad(now.getHours())+':'+pad(now.getMinutes());
-  $('gdate').textContent=y+'年'+mo+'月'+d+'日 '+wk;
+  var t=localNow();
+  var dayStr=new Date().toLocaleString('en-US',{weekday:'short',timeZone:'Asia/Shanghai'});
+  var wkMap={'Sun':'周日','Mon':'周一','Tue':'周二','Wed':'周三','Thu':'周四','Fri':'周五','Sat':'周六'};
+  var wk=wkMap[dayStr]||dayStr;
+  $('time').textContent=pad(t.h)+':'+pad(t.mi);
+  $('gdate').textContent=t.y+'年'+t.mo+'月'+t.d+'日 '+wk;
 
-  var l=solarToLunar(y,mo,d);
+  var l=solarToLunar(t.y,t.mo,t.d);
   $('lunarMain').textContent='农历 '+l.monthStr+l.dayStr;
-  var term=currentTermInfo(y,mo,d);
+  var term=currentTermInfo(t.y,t.mo,t.d);
   $('lunarSub').textContent=l.ganZhi+'年 · 属'+l.animal+' · '+term;
 }
 
@@ -239,8 +252,8 @@ function fetchWeather(lat,lon){
           }
           $('wxTrend').textContent='未来  '+parts.join('   ');
         }
-        var n=new Date();
-        $('footer').textContent='更新于 '+pad(n.getHours())+':'+pad(n.getMinutes());
+        var ft=localNow();
+        $('footer').textContent='更新于 '+pad(ft.h)+':'+pad(ft.mi);
       }catch(e){ $('footer').textContent='天气解析失败'; }
     } else if(xhr.readyState===4){
       $('footer').textContent='天气获取失败 ('+xhr.status+')';
