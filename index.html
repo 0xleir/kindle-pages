@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<!-- e-ink 友好：整页重载，避免局部刷新残影累积。有 JS 时由参数化 setTimeout 控制刷新，无 JS 时 noscript 兜底 -->
+<noscript><meta http-equiv="refresh" content="60"></noscript>
+<title>Kindle Dashboard</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body {
+    width:100%; height:100%;
+    background:#fff; color:#000;
+    font-family:"Helvetica Neue",Helvetica,Arial,"PingFang SC","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:none;
+    overflow:hidden;
+  }
+  body { position:relative; overflow:hidden; }
+  /* 旋转舞台：所有内容包在里面，整体旋转以实现横屏 */
+  .stage {
+    position:absolute; top:50%; left:50%;
+    box-sizing:border-box;
+    display:flex; flex-direction:column;
+    padding:4vw 5vw;
+  }
+  /* 竖屏 */
+  body.portrait  .stage { width:100vw; height:100vh; transform:translate(-50%,-50%); }
+  /* 横屏：交换宽高后旋转。rot90=顺时针 / rot270=逆时针，按 Kindle 横放方向二选一 */
+  body.landscape .stage { width:100vh; height:100vw; }
+  body.rot90     .stage { transform:translate(-50%,-50%) rotate(90deg); }
+  body.rot270    .stage { transform:translate(-50%,-50%) rotate(-90deg); }
+
+  /* 顶部：时间 */
+  .clock { text-align:center; }
+  .time { font-size:26vw; font-weight:700; line-height:0.95; letter-spacing:-0.02em; }
+  .gdate { font-size:6vw; font-weight:400; margin-top:1vw; }
+
+  hr { border:none; border-top:2px solid #000; margin:2vw 0; }
+
+  /* 农历行 */
+  .lunar { text-align:center; }
+  .lunar-main { font-size:7vw; font-weight:700; }
+  .lunar-sub { font-size:4.5vw; margin-top:0.8vw; }
+
+  /* 天气区 */
+  .weather { flex:1; display:flex; flex-direction:column; justify-content:flex-end; }
+  .wx-top { display:flex; align-items:baseline; justify-content:center; }
+  .wx-temp { font-size:17vw; font-weight:700; line-height:0.9; }
+  .wx-unit { font-size:8vw; font-weight:400; margin-left:1vw; }
+  .wx-city { font-size:5vw; margin-left:4vw; align-self:center; }
+  .wx-grid {
+    display:flex; justify-content:space-around;
+    font-size:4.6vw; margin-top:2.4vw; text-align:center;
+  }
+  .wx-grid .cell { flex:1; }
+  .wx-grid .lbl { font-size:3.4vw; opacity:0.75; display:block; margin-bottom:0.6vw; }
+  .wx-grid .val { font-weight:700; }
+  .wx-grid .sep { width:2px; background:#000; margin:0.5vw 0; }
+
+  .wx-trend { text-align:center; font-size:3.9vw; font-weight:700; margin-top:2.4vw; }
+  .footer { text-align:center; font-size:3vw; opacity:0.6; margin-top:2.5vw; }
+</style>
+</head>
+<body class="landscape rot90">
+  <div class="stage">
+  <div class="clock">
+    <div class="time" id="time">--:--</div>
+    <div class="gdate" id="gdate">----</div>
+  </div>
+
+  <hr>
+
+  <div class="lunar">
+    <div class="lunar-main" id="lunarMain">农历 ----</div>
+    <div class="lunar-sub" id="lunarSub">--</div>
+  </div>
+
+  <hr>
+
+  <div class="weather">
+    <div class="wx-top">
+      <span class="wx-temp" id="wxTemp">--</span>
+      <span class="wx-unit">°C</span>
+      <span class="wx-city" id="wxCity">成都</span>
+    </div>
+    <div class="wx-grid">
+      <div class="cell"><span class="lbl">体感</span><span class="val" id="wxFeel">--°</span></div>
+      <div class="sep"></div>
+      <div class="cell"><span class="lbl">湿度</span><span class="val" id="wxHum">--%</span></div>
+      <div class="sep"></div>
+      <div class="cell"><span class="lbl">风向</span><span class="val" id="wxWdir">--</span></div>
+      <div class="sep"></div>
+      <div class="cell"><span class="lbl">风速</span><span class="val" id="wxWspd">-- m/s</span></div>
+    </div>
+    <div class="wx-grid">
+      <div class="cell"><span class="lbl">日出</span><span class="val" id="wxSunrise">--</span></div>
+      <div class="sep"></div>
+      <div class="cell"><span class="lbl">日落</span><span class="val" id="wxSunset">--</span></div>
+      <div class="sep"></div>
+      <div class="cell"><span class="lbl">最高</span><span class="val" id="wxTmax">--&deg;</span></div>
+      <div class="sep"></div>
+      <div class="cell"><span class="lbl">最低</span><span class="val" id="wxTmin">--&deg;</span></div>
+    </div>
+    <div class="wx-trend" id="wxTrend">未来 --</div>
+    <div class="footer" id="footer">更新于 --:--</div>
+  </div>
+  </div><!-- /.stage -->
+
+<script>
+/* ============ 工具 ============ */
+function pad(n){ return (n<10?'0':'')+n; }
+function $(id){ return document.getElementById(id); }
+// URL 参数解析（兼容老浏览器，不依赖 URLSearchParams）
+function getParam(name,def){
+  var m=location.search.match(new RegExp('[?&]'+name+'=([^&]*)'));
+  return m?decodeURIComponent(m[1].replace(/\+/g,' ')):def;
+}
+
+/* ============ 农历算法 (1900-2100) ============ */
+var lunarInfo=[0x04bd8,0x04ae0,0x0a570,0x054d5,0x0d260,0x0d950,0x16554,0x056a0,0x09ad0,0x055d2,
+0x04ae0,0x0a5b6,0x0a4d0,0x0d250,0x1d255,0x0b540,0x0d6a0,0x0ada2,0x095b0,0x14977,
+0x04970,0x0a4b0,0x0b4b5,0x06a50,0x06d40,0x1ab54,0x02b60,0x09570,0x052f2,0x04970,
+0x06566,0x0d4a0,0x0ea50,0x06e95,0x05ad0,0x02b60,0x186e3,0x092e0,0x1c8d7,0x0c950,
+0x0d4a0,0x1d8a6,0x0b550,0x056a0,0x1a5b4,0x025d0,0x092d0,0x0d2b2,0x0a950,0x0b557,
+0x06ca0,0x0b550,0x15355,0x04da0,0x0a5b0,0x14573,0x052b0,0x0a9a8,0x0e950,0x06aa0,
+0x0aea6,0x0ab50,0x04b60,0x0aae4,0x0a570,0x05260,0x0f263,0x0d950,0x05b57,0x056a0,
+0x096d0,0x04dd5,0x04ad0,0x0a4d0,0x0d4d4,0x0d250,0x0d558,0x0b540,0x0b6a0,0x195a6,
+0x095b0,0x049b0,0x0a974,0x0a4b0,0x0b27a,0x06a50,0x06d40,0x0af46,0x0ab60,0x09570,
+0x04af5,0x04970,0x064b0,0x074a3,0x0ea50,0x06b58,0x055c0,0x0ab60,0x096d5,0x092e0,
+0x0c960,0x0d954,0x0d4a0,0x0da50,0x07552,0x056a0,0x0abb7,0x025d0,0x092d0,0x0cab5,
+0x0a950,0x0b4a0,0x0baa4,0x0ad50,0x055d9,0x04ba0,0x0a5b0,0x15176,0x052b0,0x0a930,
+0x07954,0x06aa0,0x0ad50,0x05b52,0x04b60,0x0a6e6,0x0a4e0,0x0d260,0x0ea65,0x0d530,
+0x05aa0,0x076a3,0x096d0,0x04afb,0x04ad0,0x0a4d0,0x1d0b6,0x0d250,0x0d520,0x0dd45,
+0x0b5a0,0x056d0,0x055b2,0x049b0,0x0a577,0x0a4b0,0x0aa50,0x1b255,0x06d20,0x0ada0,
+0x14b63,0x09370,0x049f8,0x04970,0x064b0,0x168a6,0x0ea50,0x06b20,0x1a6c4,0x0aae0,
+0x0a2e0,0x0d2e3,0x0c960,0x0d557,0x0d4a0,0x0da50,0x05d55,0x056a0,0x0a6d0,0x055d4,
+0x052d0,0x0a9b8,0x0a950,0x0b4a0,0x0b6a6,0x0ad50,0x055a0,0x0aba4,0x0a5b0,0x052b0,
+0x0b273,0x06930,0x07337,0x06aa0,0x0ad50,0x14b55,0x04b60,0x0a570,0x054e4,0x0d160,
+0x0e968,0x0d520,0x0daa0,0x16aa6,0x056d0,0x04ae0,0x0a9d4,0x0a2d0,0x0d150,0x0f252,0x0d520];
+
+function leapMonth(y){ return lunarInfo[y-1900]&0xf; }
+function leapDays(y){ if(leapMonth(y)) return (lunarInfo[y-1900]&0x10000)?30:29; return 0; }
+function monthDays(y,m){ return (lunarInfo[y-1900]&(0x10000>>m))?30:29; }
+function lYearDays(y){ var s=348,i; for(i=0x8000;i>0x8;i>>=1){ s+=(lunarInfo[y-1900]&i)?1:0; } return s+leapDays(y); }
+
+var Gan=['甲','乙','丙','丁','戊','己','庚','辛','壬','癸'];
+var Zhi=['子','丑','寅','卯','辰','巳','午','未','申','酉','戌','亥'];
+var Animals=['鼠','牛','虎','兔','龙','蛇','马','羊','猴','鸡','狗','猪'];
+var nStr1=['日','一','二','三','四','五','六','七','八','九','十'];
+var nStr2=['初','十','廿','卅'];
+var Months=['正','二','三','四','五','六','七','八','九','十','冬','腊'];
+
+function toChinaMonth(m){ return Months[m-1]+'月'; }
+function toChinaDay(d){
+  var s;
+  switch(d){
+    case 10: s='初十'; break;
+    case 20: s='二十'; break;
+    case 30: s='三十'; break;
+    default: s=nStr2[Math.floor(d/10)]; s+=nStr1[d%10];
+  }
+  return s;
+}
+
+function solarToLunar(y,m,d){
+  var offset=(Date.UTC(y,m-1,d)-Date.UTC(1900,0,31))/86400000;
+  var i,temp=0,leap=0,isLeap=false;
+  for(i=1900;i<2101 && offset>0;i++){ temp=lYearDays(i); offset-=temp; }
+  if(offset<0){ offset+=temp; i--; }
+  var lYear=i;
+  leap=leapMonth(i);
+  for(i=1;i<13 && offset>0;i++){
+    if(leap>0 && i===(leap+1) && !isLeap){ --i; isLeap=true; temp=leapDays(lYear); }
+    else { temp=monthDays(lYear,i); }
+    if(isLeap && i===(leap+1)) isLeap=false;
+    offset-=temp;
+  }
+  if(offset===0 && leap>0 && i===leap+1){ if(isLeap){ isLeap=false; } else { isLeap=true; --i; } }
+  if(offset<0){ offset+=temp; --i; }
+  var lMonth=i, lDay=offset+1;
+  // 干支年（以正月初一为界，这里用农历年份近似）
+  var ganZhi=Gan[(lYear-4)%10]+Zhi[(lYear-4)%12];
+  var animal=Animals[(lYear-4)%12];
+  return {
+    year:lYear, month:lMonth, day:lDay, isLeap:isLeap,
+    monthStr:(isLeap?'闰':'')+toChinaMonth(lMonth),
+    dayStr:toChinaDay(lDay),
+    ganZhi:ganZhi, animal:animal
+  };
+}
+
+/* ============ 节气 ============ */
+var sTermInfo=[0,21208,42467,63836,85337,107014,128867,150921,173149,195551,218072,240693,
+263343,285989,308563,331033,353350,375494,397447,419210,440795,462224,483532,504758];
+var termNames=['小寒','大寒','立春','雨水','惊蛰','春分','清明','谷雨','立夏','小满','芒种','夏至',
+'小暑','大暑','立秋','处暑','白露','秋分','寒露','霜降','立冬','小雪','大雪','冬至'];
+function getTermDay(y,n){
+  var offDate=new Date((31556925974.7*(y-1900)+sTermInfo[n]*60000)+Date.UTC(1900,0,6,2,5,0));
+  return offDate.getUTCDate();
+}
+// 返回今天所处/临近的节气描述
+function currentTermInfo(y,m,d){
+  var i, thisMonthIdx=(m-1)*2;
+  var t1=getTermDay(y,thisMonthIdx);     // 上半月节气
+  var t2=getTermDay(y,thisMonthIdx+1);   // 下半月中气
+  if(d===t1) return '今日 '+termNames[thisMonthIdx];
+  if(d===t2) return '今日 '+termNames[thisMonthIdx+1];
+  // 找下一个节气
+  var name,day,mm=m;
+  if(d<t1){ name=termNames[thisMonthIdx]; day=t1; }
+  else if(d<t2){ name=termNames[thisMonthIdx+1]; day=t2; }
+  else {
+    var ni=(thisMonthIdx+2)%24; var ny=y, nm=m+1;
+    if(nm>12){ nm=1; ny++; }
+    name=termNames[ni]; day=getTermDay(ny,ni); mm=nm;
+  }
+  return name+' '+mm+'/'+day;
+}
+
+/* ============ 更新时间 & 农历 ============ */
+function renderDateTime(){
+  var now=new Date();
+  var y=now.getFullYear(), mo=now.getMonth()+1, d=now.getDate();
+  var wk=['周日','周一','周二','周三','周四','周五','周六'][now.getDay()];
+  $('time').textContent=pad(now.getHours())+':'+pad(now.getMinutes());
+  $('gdate').textContent=y+'年'+mo+'月'+d+'日 '+wk;
+
+  var l=solarToLunar(y,mo,d);
+  $('lunarMain').textContent='农历 '+l.monthStr+l.dayStr;
+  var term=currentTermInfo(y,mo,d);
+  $('lunarSub').textContent=l.ganZhi+'年 · 属'+l.animal+' · '+term;
+}
+
+/* ============ ISO 时间取 HH:MM ============ */
+function hm(iso){ return iso.substr(11,5); }
+
+/* ============ 风向 ============ */
+function windDir(deg){
+  var dirs=['北','东北偏北','东北','东北偏东','东','东南偏东','东南','东南偏南',
+            '南','西南偏南','西南','西南偏西','西','西北偏西','西北','西北偏北'];
+  return dirs[Math.round(deg/22.5)%16];
+}
+
+/* ============ 天气 (Open-Meteo, 成都) ============ */
+function fetchWeather(lat,lon){
+  var url='https://api.open-meteo.com/v1/forecast?latitude='+lat+'&longitude='+lon+
+    '&current=temperature_2m,relative_humidity_2m,apparent_temperature,wind_speed_10m,wind_direction_10m'+
+    '&daily=sunrise,sunset,temperature_2m_max,temperature_2m_min'+
+    '&hourly=temperature_2m&forecast_days=2'+
+    '&wind_speed_unit=ms&timezone=Asia%2FShanghai';
+  var xhr=new XMLHttpRequest();
+  xhr.open('GET',url,true);
+  xhr.timeout=15000;
+  xhr.onreadystatechange=function(){
+    if(xhr.readyState===4 && xhr.status===200){
+      try{
+        var data=JSON.parse(xhr.responseText);
+        var c=data.current;
+        $('wxTemp').textContent=Math.round(c.temperature_2m);
+        $('wxFeel').textContent=Math.round(c.apparent_temperature)+'°';
+        $('wxHum').textContent=Math.round(c.relative_humidity_2m)+'%';
+        $('wxWdir').textContent=windDir(c.wind_direction_10m);
+        $('wxWspd').textContent=c.wind_speed_10m.toFixed(1)+' m/s';
+        // 日出日落 + 今日高低温
+        if(data.daily){
+          $('wxSunrise').textContent=hm(data.daily.sunrise[0]);
+          $('wxSunset').textContent=hm(data.daily.sunset[0]);
+          $('wxTmax').textContent=Math.round(data.daily.temperature_2m_max[0])+'°';
+          $('wxTmin').textContent=Math.round(data.daily.temperature_2m_min[0])+'°';
+        }
+        // 未来 3 个整点温度趋势
+        if(data.hourly){
+          var ts=data.hourly.time, tp=data.hourly.temperature_2m, parts=[], cnt=0;
+          for(var i=0;i<ts.length && cnt<3;i++){
+            if(ts[i]>c.time){ parts.push(parseInt(ts[i].substr(11,2),10)+'时 '+Math.round(tp[i])+'°'); cnt++; }
+          }
+          $('wxTrend').textContent='未来  '+parts.join('   ');
+        }
+        var n=new Date();
+        $('footer').textContent='更新于 '+pad(n.getHours())+':'+pad(n.getMinutes());
+      }catch(e){ $('footer').textContent='天气解析失败'; }
+    } else if(xhr.readyState===4){
+      $('footer').textContent='天气获取失败 ('+xhr.status+')';
+    }
+  };
+  xhr.ontimeout=function(){ $('footer').textContent='天气请求超时'; };
+  xhr.send();
+}
+
+/* ============ 启动（参数化）============ */
+// 支持 ?lat=..&lon=..&city=..&refresh=秒  例: ?lat=31.23&lon=121.47&city=上海&refresh=120
+var LAT=parseFloat(getParam('lat','30.5728'));
+var LON=parseFloat(getParam('lon','104.0668'));
+var CITY=getParam('city','成都');
+var REFRESH=parseInt(getParam('refresh','60'),10);
+var ROT=getParam('rotate','90');  // 90=横屏顺时针(默认) / 270 或 -90=逆时针 / 0=竖屏
+document.body.className = (ROT==='0') ? 'portrait'
+  : ('landscape '+((ROT==='270'||ROT==='-90')?'rot270':'rot90'));
+if(isNaN(LAT)) LAT=30.5728;
+if(isNaN(LON)) LON=104.0668;
+if(isNaN(REFRESH)||REFRESH<10) REFRESH=60;  // 下限 10s，防误设
+$('wxCity').textContent=CITY;
+renderDateTime();
+fetchWeather(LAT,LON);
+// 整页重载（e-ink 友好，无残影累积）；无 JS 时由 noscript 60s 兜底
+setTimeout(function(){ try{ location.reload(); }catch(e){} }, REFRESH*1000);
+</script>
+</body>
+</html>
