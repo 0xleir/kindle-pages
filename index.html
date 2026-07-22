@@ -182,22 +182,17 @@ function currentTermInfo(y,m,d){
 
 /* ============ 更新时间 & 农历 ============ */
 function localNow(){
-  // Force Asia/Shanghai regardless of system tz (CI runners = UTC)
-  // Fallback for old WebKit without Intl timeZone support
-  try{
-    var s=new Date().toLocaleString('sv-SE',{timeZone:'Asia/Shanghai'});
-    var p=s.split(/[\- :]/);
-    return {y:+p[0],mo:+p[1],d:+p[2],h:+p[3],mi:+p[4]};
-  }catch(e){
-    var now=new Date();
-    return {y:now.getFullYear(),mo:now.getMonth()+1,d:now.getDate(),h:now.getHours(),mi:now.getMinutes()};
-  }
+  // Force Asia/Shanghai (UTC+8, no DST since 1991) by pure arithmetic.
+  // Works on old Kindle WebKit which silently ignores Intl timeZone
+  // (it returns a UTC string instead of throwing, so try/catch is useless).
+  var now=new Date();
+  var sh=new Date(now.getTime()+28800000+now.getTimezoneOffset()*60000);
+  return {y:sh.getFullYear(),mo:sh.getMonth()+1,d:sh.getDate(),h:sh.getHours(),mi:sh.getMinutes(),w:sh.getDay()};
 }
 function renderDateTime(){
   var t=localNow();
-  var dayStr=new Date().toLocaleString('en-US',{weekday:'short',timeZone:'Asia/Shanghai'});
-  var wkMap={'Sun':'周日','Mon':'周一','Tue':'周二','Wed':'周三','Thu':'周四','Fri':'周五','Sat':'周六'};
-  var wk=wkMap[dayStr]||dayStr;
+  var wkArr=['周日','周一','周二','周三','周四','周五','周六'];
+  var wk=wkArr[t.w];
   $('time').textContent=pad(t.h)+':'+pad(t.mi);
   $('gdate').textContent=t.y+'年'+t.mo+'月'+t.d+'日 '+wk;
 
